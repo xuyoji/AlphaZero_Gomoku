@@ -1,6 +1,7 @@
 ## AlphaZero-Gomoku with forbidden hands and better pure mcts
 ### Example Games
 - black: trained model, white: quick roll-out policy
+  
 ![black: trained model, white:quick roll-out](./playout400.gif)
 ### Forbiddeen Hands
 Implement forbidden hands rule with linked points, that is, after this hands, in the four axis(x, y, xy, yx), it will form the linked points, which belong to the forbidden rule. (Black can't run into the forbidden hands except it will win instantly after this hand.)
