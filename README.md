@@ -1,4 +1,24 @@
-## AlphaZero-Gomoku
+## AlphaZero-Gomoku with forbidden hands and better pure mcts
+### Example Games
+- black: trained model, white: quick roll-out policy
+![black: trained model, white:quick roll-out](./playout400.gif)
+### Forbiddeen Hands
+Implement forbidden hands rule with linked points, that is, after this hands, in the four axis(x, y, xy, yx), it will form the linked points, which belong to the forbidden rule. (Black can't run into the forbidden hands except it will win instantly after this hand.)
+### Other Modification
+Implement better roll out and policy evaluation fuction. The pure roll out policy can get tie with the given train alpha-zero model on most time. And it runs very fast.
+
+Modify the mcts in pure mtst, find the expand procedure of it run expansion from a leaf node each time rather than from a node which has a unexpanded nodes. This will make the mcts lack of breadth. 
+
+I notice for each iteration, the orgin pure mcts initial a new tree rather than reuse the former subtree. I modify it to reuse the subtree.
+
+Use a pygame UI creat by Tokarev-TT-33.(For mac os 10.15, pygame 2.0.0dev10 is required).
+### Ptart Play
+Uncomment the lines in _start\_play.py_ to play with different models, or you can chose your own combination.
+* trained neural network VS my mcts method
+* trained neural network VS my quick play(roll-out) method
+* human VS human(can be used to check forbidden hands).
+
+## Origin README
 This is an implementation of the AlphaZero algorithm for playing the simple board game Gomoku (also called Gobang or Five in a Row) from pure self-play training. The game Gomoku is much simpler than Go or chess, so that we can focus on the training scheme of AlphaZero and obtain a pretty good AI model on a single PC in a few hours. 
 
 References:  
@@ -8,13 +28,9 @@ References:
 ### Update 2018.2.24: supports training with TensorFlow!
 ### Update 2018.1.17: supports training with PyTorch!
 
-### Example Games Between Trained Models
-- Each move with 400 MCTS playouts:  
-![playout400](https://raw.githubusercontent.com/junxiaosong/AlphaZero_Gomoku/master/playout400.gif)
-
 ### Requirements
 To play with the trained AI models, only need:
-- Python >= 2.7
+- Python >= 3.7
 - Numpy >= 1.11
 
 To train the AI model from scratch, further need, either:

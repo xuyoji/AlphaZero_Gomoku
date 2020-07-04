@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-@author: Junxiao Song
+@author: Junxiao Song & xuyj & okarev-TT-33
 """
 
 from __future__ import print_function
 import numpy as np
-
+from GUI_v1_4 import GUI
 
 class Board(object):
     """board for the game"""
@@ -25,11 +25,14 @@ class Board(object):
         if self.width < self.n_in_row or self.height < self.n_in_row:
             raise Exception('board width and height can not be '
                             'less than {}'.format(self.n_in_row))
+        self.start_player = self.players[start_player]
         self.current_player = self.players[start_player]  # start player
         # keep available moves in a list
-        self.availables = list(range(self.width * self.height))
+        self.availables = set(range(self.width * self.height))
+        self.availables_backup = set(range(self.width * self.height))
         self.states = {}
         self.last_move = -1
+        self.forbid = set({})
 
     def move_to_location(self, move):
         """
@@ -74,46 +77,112 @@ class Board(object):
             square_state[3][:, :] = 1.0  # indicate the colour to play
         return square_state[:, ::-1, :]
 
+    '''
+    def has_line(self, point, length, direction):
+        #check if there's a line with len(line) >= length 
+        #in the axis of with orgin = point
+        #axis: 0->x, 1->y, 10->(45 degree), -10->(-45 degree)
+        #length can be negative
+        end_free = False
+        str_direction = str(direction)
+        x, y = point%self.width, point//self.width
+        def forward(x, y, step):
+            if '0' in str_direction:
+                x += step
+            if '-1' in str_direction:
+                y -= step
+            elif '1' in str_direction:
+                y += step
+            return x, y, y*self.width+x
+        x_end, y_end, p = forward(x, y, length)
+        if not 0<=x_end<self.width or not 0<=y_end<self.height:
+            return False
+        for i in range(abs(length)):
+            x, y, p = forward(x, y, 1)
+            if self.states[p] != 1:
+                return False
+        return True
+    '''
+
+    def get_length(self, point, axis, player):
+        #get the length of linked black on axis
+        #after set black on the point 
+        #axis: 0->x, 1->y, 10->(45 degree), -10->(-45 degree)
+        #return length of linked black and end on the axis
+        #end = -1 if both end with white or out of border
+        #end = 0 if one is white or out of border and the other is empty
+        #end = 1 if both are empty
+        str_axis = str(axis)
+        end = 1
+        x, y = point%self.width, point//self.width
+        dx, dy = 0, 0
+        if '0' in str_axis:
+            dx += 1
+        if '-1' in str_axis:
+            dy -= 1
+        elif '1' in str_axis:
+            dy += 1
+        length = 1
+        for k in (-1, 1):
+            xc, yc = x, y
+            while True:
+                xc += k*dx
+                yc += k*dy
+                pc = yc*self.width+xc
+                state = self.states.get(pc)
+                if not (0<=xc<self.width and 0<=yc<self.height):
+                    end -= 1
+                    break
+                elif state!=player:
+                    if state:
+                       end -= 1 
+                    break
+                elif state==player:
+                    length += 1
+        return length, end
+
+    def check_forbid(self, point): 
+        line_list = []
+        for d in (0, 1, 10, -10):
+            length, end = self.get_length(point, d, self.start_player)
+            if length == 5:#win
+                return False
+            if length >5:#long link
+                return True
+            if length >2 and end >-1:
+                if not (length==3 and end==0):
+                    line_list.append((length, end))
+        if len(line_list)<2:
+            return False
+        if len(line_list) == 2 and line_list[0][0]!=line_list[1][0]:#43
+            return False
+        return True
+
     def do_move(self, move):
         self.states[move] = self.current_player
         self.availables.remove(move)
+        self.availables_backup.remove(move)
+        if self.current_player != self.start_player:
+            self.forbid = set({})
+            for p in self.availables:
+                if self.check_forbid(p):
+                    self.forbid.add(p)
+            self.availables = self.availables_backup-self.forbid
+        else:
+            self.availables = {_ for _ in self.availables_backup}
         self.current_player = (
             self.players[0] if self.current_player == self.players[1]
             else self.players[1]
         )
         self.last_move = move
 
+
     def has_a_winner(self):
-        width = self.width
-        height = self.height
-        states = self.states
-        n = self.n_in_row
-
-        moved = list(set(range(width * height)) - set(self.availables))
-        if len(moved) < self.n_in_row *2-1:
-            return False, -1
-
-        for m in moved:
-            h = m // width
-            w = m % width
-            player = states[m]
-
-            if (w in range(width - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n))) == 1):
-                return True, player
-
-            if (h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * width, width))) == 1):
-                return True, player
-
-            if (w in range(width - n + 1) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width + 1), width + 1))) == 1):
-                return True, player
-
-            if (w in range(n - 1, width) and h in range(height - n + 1) and
-                    len(set(states.get(i, -1) for i in range(m, m + n * (width - 1), width - 1))) == 1):
-                return True, player
-
+        if self.last_move >=0:
+            player = self.states[self.last_move]
+            for d in (0, 1, 10, -10):
+                if self.get_length(self.last_move, d, player)[0] >= 5:
+                    return True,  player
         return False, -1
 
     def game_end(self):
@@ -151,7 +220,12 @@ class Game(object):
             for j in range(width):
                 loc = i * width + j
                 p = board.states.get(loc, -1)
-                if p == player1:
+                if loc == self.board.last_move:
+                    if p == player1:
+                        print('#'.center(8), end='')
+                    elif p== player2:
+                        print('@'.center(8), end='')
+                elif p == player1:
                     print('X'.center(8), end='')
                 elif p == player2:
                     print('O'.center(8), end='')
@@ -159,12 +233,96 @@ class Game(object):
                     print('_'.center(8), end='')
             print('\r\n\r\n')
 
+    def start_play_with_UI(self, AI=None, AI2=None, start_player=1):
+        '''
+        a GUI for playing
+        '''
+        if AI:
+            AI.reset_player()
+        self.board.init_board()
+        current_player = SP = start_player
+        UI = GUI(self.board.width)
+        end = False
+        while True:
+            print('current_player', current_player)
+
+            if current_player == 0:
+                UI.show_messages('white turn')
+            else:
+                UI.show_messages('black turn')
+
+            if AI and current_player == 1 and not end:
+                move = AI.get_action(self.board)
+            else:
+                if AI2 and not end:
+                    move = AI2.get_action(self.board)
+                else:
+                    inp = UI.get_input()
+                    if not AI2 and inp[0] == 'move' and not end:
+                        if type(inp[1]) != int:
+                            move = UI.loc_2_move(inp[1])
+                        else:
+                            move = inp[1]
+                    elif inp[0] == 'RestartGame':
+                        end = False
+                        current_player = SP
+                        self.board.init_board()
+                        UI.restart_game()
+                        if AI:
+                            AI.reset_player()
+                        if AI2:
+                            AI2.reset_player()
+                        continue
+                    elif inp[0] == 'ResetScore':
+                        UI.reset_score()
+                        continue
+                    elif inp[0] == 'quit':
+                        exit()
+                        continue
+                    elif inp[0] == 'SwitchPlayer':
+                        end = False
+                        self.board.init_board()
+                        UI.restart_game(False)
+                        UI.reset_score()
+                        if AI:
+                            AI.reset_player()
+                        if AI2:
+                            AI2.reset_player()
+                        SP = (SP+1) % 2
+                        current_player = SP
+                        continue
+                    else:
+                        # print('ignored inp:', inp)
+                        continue
+            # print('player %r move : %r'%(current_player,[move//self.board.width,move%self.board.width]))
+            if not end:
+                # print(move, type(move), current_player)
+                if move in self.board.availables:
+                    UI.render_step(move, self.board.current_player)
+                    self.board.do_move(move)
+                    print('move', move%self.board.width, move//self.board.width, '\n')
+                    # print(2, self.board.get_current_player())
+                    current_player = (current_player + 1) % 2
+                    # UI.render_step(move, current_player)
+                    end, winner = self.board.game_end()
+                    if end:
+                        if winner != -1:
+                            print("Game end. Winner is player", winner)
+                            UI.add_score(winner)
+                        else:
+                            print("Game end. Tie")
+                        print(UI.score)
+                        print()
+                else:
+                    print('forbid hand!')
+
     def start_play(self, player1, player2, start_player=0, is_shown=1):
         """start a game between two players"""
-        if start_player not in (0, 1):
+        start_player_idx = start_player
+        if start_player_idx not in (0, 1):
             raise Exception('start_player should be either 0 (player1 first) '
                             'or 1 (player2 first)')
-        self.board.init_board(start_player)
+        self.board.init_board(start_player_idx)
         p1, p2 = self.board.players
         player1.set_player_ind(p1)
         player2.set_player_ind(p2)

@@ -4,7 +4,7 @@ A pure implementation of the Monte Carlo Tree Search (MCTS)
 
 @author: Junxiao Song
 """
-
+import random, math
 import numpy as np
 import copy
 from operator import itemgetter
@@ -13,16 +13,34 @@ from operator import itemgetter
 def rollout_policy_fn(board):
     """a coarse, fast version of policy_fn used in the rollout phase."""
     # rollout randomly
-    action_probs = np.random.rand(len(board.availables))
-    return zip(board.availables, action_probs)
-
+    #action_probs = np.random.rand(len(board.availables))
+    #return zip(board.availables, action_probs)
+    return list(policy_value_fn(board)[0])
 
 def policy_value_fn(board):
     """a function that takes in a state and outputs a list of (action, probability)
     tuples and a score for the state"""
     # return uniform probabilities and 0 score for pure MCTS
-    action_probs = np.ones(len(board.availables))/len(board.availables)
-    return zip(board.availables, action_probs), 0
+    r = [0,0,0,0]
+    score = {}
+    total_r = 0
+    for point in board.availables:
+        for k,d in enumerate((0, 1, 10, -10)):
+            length, end = board.get_length(point, d, board.current_player)
+            length1, end1 = board.get_length(point, d, 3-board.current_player)
+            r[k] = max((end!=-1 or length>4)*length**2 + (end1!=-1 or length1>4)*length1**2 + end + end1, 1)
+            if length>4:
+                r[k] += 3000
+            if length1>4:
+                r[k] += 1800
+            if (length==4 and end==1) or (length1==4 and end1==1):
+                r[k] += 1000
+        sum_r = sum(r)
+        total_r += sum_r
+        score[point] = sum_r
+    for point in score:
+        score[point]/=total_r
+    return score.items(), 0
 
 
 class TreeNode(object):
@@ -33,27 +51,32 @@ class TreeNode(object):
     def __init__(self, parent, prior_p):
         self._parent = parent
         self._children = {}  # a map from action to TreeNode
+        self._actions = {}
         self._n_visits = 0
         self._Q = 0
         self._u = 0
         self._P = prior_p
 
-    def expand(self, action_priors):
+    def expand(self, state):
         """Expand tree by creating new children.
         action_priors: a list of tuples of actions and their prior probability
             according to the policy function.
         """
-        for action, prob in action_priors:
-            if action not in self._children:
-                self._children[action] = TreeNode(self, prob)
+        items = set(self._actions.keys()) - set(self._children.keys())
+        _ = np.array(list(items))
+        pick = _[random.choice(list(np.where(_==max(_))[0]))]
+        self._children[pick] = TreeNode(self, self._actions[pick])
+        state.do_move(pick)
+        return self._children[pick]
 
     def select(self, c_puct):
         """Select action among children that gives maximum action value Q
         plus bonus u(P).
         Return: A tuple of (action, next_node)
         """
-        return max(self._children.items(),
-                   key=lambda act_node: act_node[1].get_value(c_puct))
+        items = tuple(self._children.items())
+        _ = np.array([__[1].get_value(c_puct) for __ in items])
+        return items[random.choice(list(np.where(_==max(_))[0]))]
 
     def update(self, leaf_value):
         """Update node values from leaf evaluation.
@@ -70,7 +93,7 @@ class TreeNode(object):
         """
         # If it is not root, this node's parent should be updated first.
         if self._parent:
-            self._parent.update_recursive(-leaf_value)
+            self._parent.update_recursive(1-leaf_value)
         self.update(leaf_value)
 
     def get_value(self, c_puct):
@@ -80,14 +103,14 @@ class TreeNode(object):
         c_puct: a number in (0, inf) controlling the relative impact of
             value Q, and prior probability P, on this node's score.
         """
-        self._u = (c_puct * self._P *
-                   np.sqrt(self._parent._n_visits) / (1 + self._n_visits))
+        self._u = (c_puct * self._P * 
+          np.sqrt(math.log(self._parent._n_visits) / (1 + self._n_visits)))
         return self._Q + self._u
 
-    def is_leaf(self):
+    def has_expanded(self):
         """Check if leaf node (i.e. no nodes below this have been expanded).
         """
-        return self._children == {}
+        return len(self._actions)!=len(self._children) or not self._children
 
     def is_root(self):
         return self._parent is None
@@ -118,22 +141,23 @@ class MCTS(object):
         """
         node = self._root
         while(1):
-            if node.is_leaf():
-
+            if node.has_expanded() :
                 break
             # Greedily select next move.
             action, node = node.select(self._c_puct)
             state.do_move(action)
-
-        action_probs, _ = self._policy(state)
+        if not node._children:#is leaf
+            action_probs, _ = self._policy(state)
+            for a,p in action_probs:
+                node._actions[a] = p
         # Check for end of game
         end, winner = state.game_end()
         if not end:
-            node.expand(action_probs)
+            node = node.expand(state)
         # Evaluate the leaf node by random rollout
         leaf_value = self._evaluate_rollout(state)
         # Update value and visit count of nodes in this traversal.
-        node.update_recursive(-leaf_value)
+        node.update_recursive(1-leaf_value)
 
     def _evaluate_rollout(self, state, limit=1000):
         """Use the rollout policy to play until the end of the game,
@@ -145,16 +169,28 @@ class MCTS(object):
             end, winner = state.game_end()
             if end:
                 break
-            action_probs = rollout_policy_fn(state)
-            max_action = max(action_probs, key=itemgetter(1))[0]
+            tmp = list(rollout_policy_fn(state))
+            random.shuffle(tmp)
+            max_action = max(tmp, key=lambda a:a[1])[0]
+            '''
+            action_probs = list(rollout_policy_fn(state))
+            action_probs.sort(key=lambda a: a[1])
+            actions = [_[0] for _ in action_probs[-2:]]
+            probs = [_[1] for _ in action_probs[-2:]]
+            '''
+            '''
+            _ = np.array([__[1] for __ in action_probs])
+            max_action =  action_probs[random.choice(list(np.where(_==max(_))[0]))][0]
+            '''
+            #action = random.choices(actions, probs)[0]
             state.do_move(max_action)
         else:
             # If no break from the loop, issue a warning.
             print("WARNING: rollout reached move limit")
         if winner == -1:  # tie
-            return 0
+            return 0.5
         else:
-            return 1 if winner == player else -1
+            return 1 if winner == player else 0
 
     def get_move(self, state):
         """Runs all playouts sequentially and returns the most visited action.
@@ -165,8 +201,9 @@ class MCTS(object):
         for n in range(self._n_playout):
             state_copy = copy.deepcopy(state)
             self._playout(state_copy)
-        return max(self._root._children.items(),
-                   key=lambda act_node: act_node[1]._n_visits)[0]
+        items = tuple(self._root._children.items())
+        _ = np.array([__[1]._n_visits for __ in items])
+        return items[random.choice(list(np.where(_==max(_))[0]))][0]
 
     def update_with_move(self, last_move):
         """Step forward in the tree, keeping everything we already know
@@ -184,8 +221,9 @@ class MCTS(object):
 
 class MCTSPlayer(object):
     """AI player based on MCTS"""
-    def __init__(self, c_puct=5, n_playout=2000):
+    def __init__(self, c_puct=5, n_playout=2000, quick_play=False):
         self.mcts = MCTS(policy_value_fn, c_puct, n_playout)
+        self.quick_play = quick_play
 
     def set_player_ind(self, p):
         self.player = p
@@ -194,10 +232,19 @@ class MCTSPlayer(object):
         self.mcts.update_with_move(-1)
 
     def get_action(self, board):
+        import time
         sensible_moves = board.availables
         if len(sensible_moves) > 0:
-            move = self.mcts.get_move(board)
-            self.mcts.update_with_move(-1)
+            if self.quick_play:
+                tmp = list(rollout_policy_fn(board))
+                random.shuffle(tmp)
+                move = max(tmp, key=lambda a:a[1])[0]
+            else:
+                self.mcts.update_with_move(board.last_move)
+                move = self.mcts.get_move(board)
+                self.mcts.update_with_move(move)
+            #print(move)
+            #time.sleep(0.5)
             return move
         else:
             print("WARNING: the board is full")
