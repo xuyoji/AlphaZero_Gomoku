@@ -1,9 +1,9 @@
-## AlphaZero-Gomoku with forbidden hands and better pure mcts
+## AlphaZero-Gomoku with forbidden hands, UI and better pure mcts
 ### Example Games
 - black: trained model, white: quick roll-out policy
   
 ![black: trained model, white:quick roll-out](./playout400.gif)
-### Forbiddeen Hands
+### Forbidden Hands
 Implement forbidden hands rule with linked points, that is, after this hands, in the four axis(x, y, xy, yx), it will form the linked points, which belong to the forbidden rule. (Black can't run into the forbidden hands except it will win instantly after this hand.)
 ### Other Modification
 Implement better roll out and policy evaluation fuction. The pure roll out policy can get tie with the given train alpha-zero model on most time. And it runs very fast.
@@ -12,7 +12,7 @@ Modify the mcts in pure mtst, find the expand procedure of it run expansion from
 
 I notice for each iteration, the orgin pure mcts initial a new tree rather than reuse the former subtree. I modify it to reuse the subtree.
 
-Use a pygame UI creat by Tokarev-TT-33.(For mac os 10.15, pygame 2.0.0dev10 is required).
+Use a pygame UI created by Tokarev-TT-33.(For mac os 10.15, pygame 2.0.0dev10 is required).
 ### Start Play
 Uncomment the lines in _start\_play.py_ to play with different models, or you can chose your own combination.
 * trained neural network VS my mcts method
