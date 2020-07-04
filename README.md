@@ -13,7 +13,7 @@ Modify the mcts in pure mtst, find the expand procedure of it run expansion from
 I notice for each iteration, the orgin pure mcts initial a new tree rather than reuse the former subtree. I modify it to reuse the subtree.
 
 Use a pygame UI creat by Tokarev-TT-33.(For mac os 10.15, pygame 2.0.0dev10 is required).
-### Ptart Play
+### Start Play
 Uncomment the lines in _start\_play.py_ to play with different models, or you can chose your own combination.
 * trained neural network VS my mcts method
 * trained neural network VS my quick play(roll-out) method
